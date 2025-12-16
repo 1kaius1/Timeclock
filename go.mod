@@ -1,4 +1,4 @@
-module github.com/yourname/timeclock
+module github.com/1kaius1/Timeclock
 
 go 1.21
 
