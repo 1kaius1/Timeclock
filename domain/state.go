@@ -8,7 +8,7 @@ import (
     "time"
 
     "github.com/google/uuid"
-    "github.com/yourname/timeclock/storage"
+    "github.com/1kaius1/Timeclock/storage"
 )
 
 // AppState defines the in-memory state machine for Timeclock.
