@@ -1,0 +1,11 @@
+
+Package: timeclock
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Your Name <you@example.com>
+Description: Timeclock - Track work time by tasks/projects with Start/Pause/Stop and reporting.
+ This package installs a Linux desktop app (Fyne GUI) for time tracking with SQLite storage.
+
+

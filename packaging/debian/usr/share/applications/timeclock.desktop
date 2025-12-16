@@ -1,0 +1,11 @@
+
+[Desktop Entry]
+Type=Application
+Name=Timeclock
+Comment=Track work time with Start/Pause/Stop and report totals
+Exec=timeclock
+Icon=timeclock
+Terminal=false
+Categories=Utility;Office;
+
+
