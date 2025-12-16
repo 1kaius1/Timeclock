@@ -49,6 +49,56 @@ func RunApp(state *domain.AppState, dbPath string, scale float32) {
 	_ = elapsedBind.Set("Elapsed: 00m")
 	elapsedLabel := widget.NewLabelWithData(elapsedBind)
 
+	// Recent events list - shows last 5 state changes
+	recentEventsList := widget.NewList(
+		func() int { return 0 }, // will be updated dynamically
+		func() fyne.CanvasObject {
+			return widget.NewLabel("template")
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			// will be updated dynamically
+		},
+	)
+
+	// Function to refresh recent events from database
+	refreshRecentEvents := func() {
+		rows, err := state.DB.Query(`
+SELECT timestamp_utc, action, category, description
+FROM events
+ORDER BY id DESC
+LIMIT 5;
+`)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+
+		var events []string
+		for rows.Next() {
+			var timestampUTC int64
+			var action, category, description string
+			if err := rows.Scan(&timestampUTC, &action, &category, &description); err != nil {
+				continue
+			}
+			t := time.Unix(timestampUTC, 0).Local()
+			timeStr := t.Format("15:04:05")
+			desc := description
+			if len(desc) > 30 {
+				desc = desc[:27] + "..."
+			}
+			events = append(events, fmt.Sprintf("%s  %s  %s  %s", timeStr, action, category, desc))
+		}
+
+		// Update list
+		recentEventsList.Length = func() int { return len(events) }
+		recentEventsList.UpdateItem = func(id widget.ListItemID, obj fyne.CanvasObject) {
+			if id < len(events) {
+				obj.(*widget.Label).SetText(events[id])
+			}
+		}
+		recentEventsList.Refresh()
+	}
+
 	// Reports widgets
 	fromEntry := widget.NewEntry()
 	fromEntry.PlaceHolder = "From (YYYY-MM-DD)"
@@ -77,6 +127,7 @@ func RunApp(state *domain.AppState, dbPath string, scale float32) {
 			return
 		}
 		updateUIForState(state, startBtn, pauseBtn, stopBtn, descEntry, categorySelect)
+		refreshRecentEvents()
 		// Optional immediate state label update (not required; ticker will update in <1s)
 		switch state.CurrentState {
 		case domain.Stopped:
@@ -94,6 +145,7 @@ func RunApp(state *domain.AppState, dbPath string, scale float32) {
 			return
 		}
 		updateUIForState(state, startBtn, pauseBtn, stopBtn, descEntry, categorySelect)
+		refreshRecentEvents()
 		switch state.CurrentState {
 		case domain.Stopped:
 			_ = stateBind.Set("State: Stopped")
@@ -110,6 +162,7 @@ func RunApp(state *domain.AppState, dbPath string, scale float32) {
 			return
 		}
 		updateUIForState(state, startBtn, pauseBtn, stopBtn, descEntry, categorySelect)
+		refreshRecentEvents()
 		switch state.CurrentState {
 		case domain.Stopped:
 			_ = stateBind.Set("State: Stopped")
@@ -208,14 +261,26 @@ func RunApp(state *domain.AppState, dbPath string, scale float32) {
 		}
 	})
 
-	// Layout panes
-	controls := container.NewVBox(
+	// Layout panes - Track tab with recent events
+	controlsTop := container.NewVBox(
 		widget.NewLabel("Work Details"),
 		descEntry,
-		categorySelect, // locked dropdown
+		categorySelect,
 		container.NewHBox(startBtn, pauseBtn, stopBtn),
 		roundToggle,
 		statusBar,
+	)
+
+	recentEventsSection := container.NewBorder(
+		widget.NewLabel("Recent Activity"),
+		nil, nil, nil,
+		recentEventsList,
+	)
+
+	controls := container.NewBorder(
+		controlsTop,
+		nil, nil, nil,
+		recentEventsSection,
 	)
 
 	reports := container.NewVBox(
@@ -238,11 +303,22 @@ func RunApp(state *domain.AppState, dbPath string, scale float32) {
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 
+	// Status line at bottom
+	statusLine := widget.NewLabel(fmt.Sprintf("DB: %s • Scale: %d%%", dbPath, int(scale*100)))
+
+	// Main content with status line at bottom
+	mainContent := container.NewBorder(
+		nil,
+		statusLine,
+		nil, nil,
+		tabs,
+	)
+
 	// Initial UI state
 	updateUIForState(state, startBtn, pauseBtn, stopBtn, descEntry, categorySelect)
-	lastActionLabel.SetText(fmt.Sprintf("DB: %s • Scale: %d%%", dbPath, int(scale*100)))
+	refreshRecentEvents()
 
-	w.SetContent(tabs)
+	w.SetContent(mainContent)
 	w.Resize(fyne.NewSize(700, 500))
 	w.SetCloseIntercept(func() {
 		// Optional: warn if an interval is in progress before closing.
