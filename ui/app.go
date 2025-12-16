@@ -9,10 +9,11 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/yourname/timeclock/domain"
-	"github.com/yourname/timeclock/reporting"
+	"github.com/1kaius1/Timeclock/domain"
+	"github.com/1kaius1/Timeclock/reporting"
 )
 
 // RunApp launches the Fyne GUI.
@@ -20,55 +21,111 @@ func RunApp(state *domain.AppState, dbPath string) {
 	a := app.NewWithID("com.example.timeclock")
 	w := a.NewWindow("Timeclock")
 
-	// --- Controls ---
+	// --- Controls (declare first) ---
 	descEntry := widget.NewEntry()
 	descEntry.PlaceHolder = "Description of work..."
+
 	categoryOpts := []string{"Task", "Project", "Training", "Mentoring", "Incident", "Major Incident"}
 	categorySelect := widget.NewSelect(categoryOpts, func(string) {})
 	categorySelect.PlaceHolder = "Select category"
 
-	startBtn := widget.NewButton("Start Work", func() {
-		// Start from Stopped or Resume from Paused; use current desc/category snapshot
+	// Declare buttons up-front so closures can capture them
+	var startBtn *widget.Button
+	var pauseBtn *widget.Button
+	var stopBtn *widget.Button
+
+	// Bindings for labels (idiomatic Fyne)
+	stateBind := binding.NewString()
+	_ = stateBind.Set("State: Stopped")
+	stateLabel := widget.NewLabelWithData(stateBind)
+
+	elapsedBind := binding.NewString()
+	_ = elapsedBind.Set("Elapsed: 00m")
+	elapsedLabel := widget.NewLabelWithData(elapsedBind)
+
+	lastActionLabel := widget.NewLabel("")
+
+	// Reports widgets
+	fromEntry := widget.NewEntry()
+	fromEntry.PlaceHolder = "From (YYYY-MM-DD)"
+	toEntry := widget.NewEntry()
+	toEntry.PlaceHolder = "To (YYYY-MM-DD)"
+	var runReportBtn *widget.Button
+	reportOutput := widget.NewMultiLineEntry()
+	reportOutput.SetPlaceHolder("Totals per category will appear here...")
+	reportOutput.Disable()
+	presenceOutput := widget.NewMultiLineEntry()
+	presenceOutput.SetPlaceHolder("Presence days will appear here...")
+	presenceOutput.Disable()
+
+	// Preferences: rounding toggle (default nearest minute)
+	roundToggle := widget.NewCheck("Show exact durations (seconds)", func(exact bool) {
+		// exact == true -> show seconds; so RoundToNearestMinute = !exact
+		state.RoundToNearestMinute = !exact
+	})
+	roundToggle.SetChecked(false) // default nearest minute (toggle OFF)
+
+	// --- Wire up handlers AFTER widgets exist ---
+
+	startBtn = widget.NewButton("Start Work", func() {
 		if err := state.StartWork(strings.TrimSpace(descEntry.Text), categorySelect.Selected); err != nil {
 			notifyError(w, "Start/Resume error", err)
 			return
 		}
 		updateUIForState(state, startBtn, pauseBtn, stopBtn, descEntry, categorySelect)
+		// Optional immediate state label update (not required; ticker will update in <1s)
+		switch state.CurrentState {
+		case domain.Stopped:
+			_ = stateBind.Set("State: Stopped")
+		case domain.InProgress:
+			_ = stateBind.Set("State: In-Progress")
+		case domain.Paused:
+			_ = stateBind.Set("State: Paused")
+		}
 	})
-	pauseBtn := widget.NewButton("Pause Work", func() {
+
+	pauseBtn = widget.NewButton("Pause Work", func() {
 		if err := state.PauseWork(); err != nil {
 			notifyError(w, "Pause error", err)
 			return
 		}
 		updateUIForState(state, startBtn, pauseBtn, stopBtn, descEntry, categorySelect)
+		switch state.CurrentState {
+		case domain.Stopped:
+			_ = stateBind.Set("State: Stopped")
+		case domain.InProgress:
+			_ = stateBind.Set("State: In-Progress")
+		case domain.Paused:
+			_ = stateBind.Set("State: Paused")
+		}
 	})
-	stopBtn := widget.NewButton("Stop Work", func() {
+
+	stopBtn = widget.NewButton("Stop Work", func() {
 		if err := state.StopWork(); err != nil {
 			notifyError(w, "Stop error", err)
 			return
 		}
 		updateUIForState(state, startBtn, pauseBtn, stopBtn, descEntry, categorySelect)
+		switch state.CurrentState {
+		case domain.Stopped:
+			_ = stateBind.Set("State: Stopped")
+		case domain.InProgress:
+			_ = stateBind.Set("State: In-Progress")
+		case domain.Paused:
+			_ = stateBind.Set("State: Paused")
+		}
 	})
 
-	// Preferences: rounding toggle
-	roundToggle := widget.NewCheck("Show exact durations (seconds)", func(on bool) {
-		state.RoundToNearestMinute = !on // exact seconds ON => round OFF
-	})
-	roundToggle.SetChecked(false) // default nearest minute (toggle OFF)
-
-	// Status bar: state + elapsed + last action time
-	stateLabel := widget.NewLabel("State: Stopped")
-	elapsedLabel := widget.NewLabel("Elapsed: 00m")
-	lastActionLabel := widget.NewLabel("")
-
+	// Status bar (grouped)
 	statusBar := container.NewHBox(stateLabel, widget.NewSeparator(), elapsedLabel, widget.NewSeparator(), lastActionLabel)
 
-	// Ticker to update elapsed while InProgress
+	// Ticker to update elapsed while InProgress (binding handles UI thread safely)
 	go func() {
 		t := time.NewTicker(1 * time.Second)
 		defer t.Stop()
 		for range t.C {
 			el := state.Elapsed()
+
 			// Format elapsed according to rounding preference
 			var txt string
 			if state.RoundToNearestMinute {
@@ -85,26 +142,22 @@ func RunApp(state *domain.AppState, dbPath string) {
 					txt = fmt.Sprintf("Elapsed: %dm %ds", m, s)
 				}
 			}
-			elapsedLabel.SetText(txt)
+			_ = elapsedBind.Set(txt)
 
-			// Update state label (in case of transitions)
+			// Reflect current state label
 			switch state.CurrentState {
 			case domain.Stopped:
-				stateLabel.SetText("State: Stopped")
+				_ = stateBind.Set("State: Stopped")
 			case domain.InProgress:
-				stateLabel.SetText("State: In-Progress")
+				_ = stateBind.Set("State: In-Progress")
 			case domain.Paused:
-				stateLabel.SetText("State: Paused")
+				_ = stateBind.Set("State: Paused")
 			}
 		}
 	}()
 
-	// Reports view (Phase 1 basic): date range & totals per category
-	fromEntry := widget.NewEntry()
-	fromEntry.PlaceHolder = "From (YYYY-MM-DD)"
-	toEntry := widget.NewEntry()
-	toEntry.PlaceHolder = "To (YYYY-MM-DD)"
-	runReportBtn := widget.NewButton("Run Report", func() {
+	// Reports: run button handler
+	runReportBtn = widget.NewButton("Run Report", func() {
 		from := strings.TrimSpace(fromEntry.Text)
 		to := strings.TrimSpace(toEntry.Text)
 		if !isYYYYMMDD(from) || !isYYYYMMDD(to) {
@@ -144,20 +197,18 @@ func RunApp(state *domain.AppState, dbPath string) {
 			notifyError(w, "Presence error", err)
 			return
 		}
-		presenceOutput.SetText("Days with any work:\n" + strings.Join(days, ", "))
+		if len(days) == 0 {
+			presenceOutput.SetText("Days with any work:\n(none)")
+		} else {
+			presenceOutput.SetText("Days with any work:\n" + strings.Join(days, ", "))
+		}
 	})
-	reportOutput := widget.NewMultiLineEntry()
-	reportOutput.SetPlaceHolder("Totals per category will appear here...")
-	reportOutput.Disable() // read-only feel
-	presenceOutput := widget.NewMultiLineEntry()
-	presenceOutput.SetPlaceHolder("Presence days will appear here...")
-	presenceOutput.Disable()
 
 	// Layout panes
 	controls := container.NewVBox(
 		widget.NewLabel("Work Details"),
 		descEntry,
-		categorySelect,
+		categorySelect, // locked dropdown
 		container.NewHBox(startBtn, pauseBtn, stopBtn),
 		roundToggle,
 		statusBar,
@@ -183,28 +234,25 @@ func RunApp(state *domain.AppState, dbPath string) {
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 
-	// Set initial UI state
+	// Initial UI state
 	updateUIForState(state, startBtn, pauseBtn, stopBtn, descEntry, categorySelect)
 	lastActionLabel.SetText(fmt.Sprintf("DB: %s", dbPath))
 
-	// TODO: Keyboard shortcuts.
-	// Fyne’s global shortcut API varies by version; we’ll add adaptive shortcuts
-	// in Phase 3 to ensure cross-desktop reliability for X11/Wayland/macOS/Windows.
+	// TODO (Phase 3): Keyboard shortcuts (adaptive Start/Resume, Pause, Stop).
 
 	w.SetContent(tabs)
 	w.Resize(fyne.NewSize(700, 500))
 	w.SetCloseIntercept(func() {
 		// Optional: warn if an interval is in progress before closing.
 		if state.CurrentState == domain.InProgress {
-			dialog := widget.NewLabel("Work is In-Progress. Stop or Pause before closing to ensure proper logging.")
-			// Very basic notice; for Phase 3 we can add confirmation dialog.
-			fmt.Println(dialog.Text)
+			fmt.Println("Work is In-Progress. Stop or Pause before closing to ensure proper logging.")
 		}
 		w.Close()
 	})
 	w.ShowAndRun()
 }
 
+// updateUIForState keeps its original signature (no bindings here)
 func updateUIForState(state *domain.AppState, startBtn, pauseBtn, stopBtn *widget.Button, descEntry *widget.Entry, category *widget.Select) {
 	switch state.CurrentState {
 	case domain.Stopped:
@@ -235,9 +283,8 @@ func updateUIForState(state *domain.AppState, startBtn, pauseBtn, stopBtn *widge
 }
 
 func notifyError(w fyne.Window, title string, err error) {
-	// Simple console + color change; Phase 3 can add dialog.
+	// Minimal notify; Phase 3 can add dialog boxes.
 	fmt.Printf("%s: %v\n", title, err)
-	w.Canvas().SetOnTypedRune(func(r rune) {}) // NOP: placeholder to keep UI responsive
 }
 
 // isYYYYMMDD validates a date string in the form YYYY-MM-DD.

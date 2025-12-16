@@ -59,6 +59,7 @@ ORDER BY date_local;
         }
         days = append(days, d)
     }
-    return    return days, rows.Err()
+    return days, rows.Err()
+}
 
 

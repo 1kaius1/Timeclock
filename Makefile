@@ -2,27 +2,29 @@
 APP_NAME := timeclock
 BIN_DIR := bin
 LINUX_BIN := $(BIN_DIR)/$(APP_NAME)-linux-amd64
-DEB_DIR := packaging/debian
 
-.PHONY: all clean build-linux deb
+.PHONY: all clean build-linux deb deps
 
 all: build-linux
 
 clean:
     rm -rf $(BIN_DIR)
-    rm -rf $(DEB_DIR)/usr/bin/$(APP_NAME)
+
+# Install build dependencies (Debian/Ubuntu)
+deps:
+    sudo apt-get update && sudo apt-get install -y \
+      build-essential pkg-config libgl1-mesa-dev xorg-dev \
+      libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev \
+      libwayland-dev libxkbcommon-dev
 
 build-linux:
     mkdir -p $(BIN_DIR)
-    GOOS=linux GOARCH=amd64 go build -o $(LINUX_BIN) ./cmd/timeclock
+    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o $(LINUX_BIN) ./cmd/timeclock
 
-# Build a simple .deb package (amd64). Requires dpkg-deb.
 deb: build-linux
-    # Install binary into staging tree
-    mkdir -p $(DEB_DIR)/usr/bin
-    cp $(LINUX_BIN) $(DEB_DIR)/usr/bin/$(APP_NAME)
-    # Build the deb
-    dpkg-deb --build packaging/debian $(APP_NAME)_1.0.0_amd64.deb
-    @echo "Built $(APP_NAME)_1.0.0_amd64.deb"
+    mkdir -p packaging/debian/usr/bin
+    cp $(LINUX_BIN) packaging/debian/usr/bin/timeclock
+    dpkg-deb --build packaging/debian timeclock_1.0.0_amd64.deb
+    @echo "Built timeclock_1.0.0_amd64.deb"
 
 
