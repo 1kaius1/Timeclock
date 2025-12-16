@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/1kaius1/Timeclock/domain"
@@ -20,6 +21,25 @@ import (
 func RunApp(state *domain.AppState, dbPath string) {
 	a := app.NewWithID("com.example.timeclock")
 	w := a.NewWindow("Timeclock")
+
+	// clampScale ensures sacle stays in a sensible range
+	clampScale := func(s float32) float32 {
+		if s < 0.75 {
+			return 0.75
+		}
+		if s > 2.0 {
+			return 2.0
+		}
+		return s
+	}
+
+	applyScale := func(s float32) {
+		s = clampScale(s)
+		if s != a.Settings().Scale() {
+			a.Settings().SetScale(s)
+		}
+		scale = s
+	}
 
 	// --- Controls (declare first) ---
 	descEntry := widget.NewEntry()
@@ -249,6 +269,44 @@ func RunApp(state *domain.AppState, dbPath string) {
 		}
 		w.Close()
 	})
+
+	// Version-agnostic hotkeys via desktop.Canvas key events.
+	// We track whether Ctrl is pressed and react to +, =, -, 0 keys.
+	if dc, ok := w.Canvas().(desktop.Canvas); ok {
+		ctrlPressed := false
+
+		dc.SetOnKeyDown(func(ev *fyne.KeyEvent) {
+			// Track Ctrl held state (left or right control)
+			if ev.Name == fyne.KeyControl || ev.Name == fyne.KeyLeftControl || ev.Name == fyne.KeyRightControl {
+				ctrlPressed = true
+				return
+			}
+
+			if !ctrlPressed {
+				return
+			}
+
+			switch ev.Name {
+			case fyne.KeyPlus, fyne.KeyEqual: // some keyboards emit '=' for plus without shift
+				applyScale(scale + 0.10)
+				// Optional: reflect scale in status bar
+				lastActionLabel.SetText(fmt.Sprintf("DB: %s • Scale: %d%%", dbPath, int(scale*100)))
+			case fyne.KeyMinus:
+				applyScale(scale - 0.10)
+				lastActionLabel.SetText(fmt.Sprintf("DB: %s • Scale: %d%%", dbPath, int(scale*100)))
+			case fyne.Key0:
+				applyScale(1.0)
+				lastActionLabel.SetText(fmt.Sprintf("DB: %s • Scale: %d%%", dbPath, int(scale*100)))
+			}
+		})
+
+		dc.SetOnKeyUp(func(ev *fyne.KeyEvent) {
+			// Reset Ctrl held state
+			if ev.Name == fyne.KeyControl || ev.Name == fyne.KeyLeftControl || ev.Name == fyne.KeyRightControl {
+				ctrlPressed = false
+			}
+		})
+	}
 	w.ShowAndRun()
 }
 
