@@ -2,7 +2,7 @@ APP_NAME := timeclock
 BIN_DIR := bin
 LINUX_BIN := $(BIN_DIR)/$(APP_NAME)-linux-amd64
 WINDOWS_BIN := $(BIN_DIR)/$(APP_NAME)-windows-amd64.exe
-DARWIN_BIN := $(BIN_DIR)/$(APP_NAME)-darwin-amd64
+DARWIN_BIN := $(BIN_DIR)/$(APP_NAME)-darwin-arm64
 
 .PHONY: all clean build-linux build-windows build-darwin deb deps-linux deps-win32 deps-darwin
 
@@ -39,12 +39,11 @@ build-windows:
 
 build-darwin:
 	mkdir -p $(BIN_DIR)
-	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o $(DARWIN_BIN) ./cmd/timeclock
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o $(DARWIN_BIN) ./cmd/timeclock
 
 deb: build-linux
 	mkdir -p packaging/debian/usr/bin
 	cp $(LINUX_BIN) packaging/debian/usr/bin/timeclock
 	dpkg-deb --build packaging/debian timeclock_1.0.0_amd64.deb
 	@echo "Built timeclock_1.0.0_amd64.deb"
-
 
