@@ -21,7 +21,7 @@ A simple, cross-platform time tracking application built with Go and Fyne. Track
 
 ### Pre-built Binaries
 
-We don't yet offer pre-built binaries, but if the project becomes popular enough I'll add them.
+Pre-built binaries aren't currently available, but if the project becomes popular enough I'll add them.
 
 ### Building from Source
 
