@@ -337,8 +337,9 @@ LIMIT 5;
 		widget.NewLabel("Work Details"),
 		descEntry,
 		categorySelect,
-		container.NewHBox(startBtn, pauseBtn, stopBtn),
-		container.NewHBox(stateLabel, widget.NewSeparator(), elapsedLabel),
+		// container.NewHBox(startBtn, pauseBtn, stopBtn),
+		container.NewHBox(startBtn, pauseBtn, stopBtn, widget.NewSeparator(), stateLabel, widget.NewSeparator(), elapsedLabel),
+		// container.NewHBox(stateLabel, widget.NewSeparator(), elapsedLabel),
 	)
 
 	recentEventsSection := container.NewBorder(
@@ -397,10 +398,10 @@ LIMIT 5;
 
 	// Status line at bottom
 	statusLine := container.NewBorder(
-		nil, nil,
-		widget.NewLabel(fmt.Sprintf("DB: %s", dbPath)),
+		nil, nil, nil,
+		// widget.NewLabel(fmt.Sprintf("DB: %s", dbPath)),
+		// widget.NewLabel(fmt.Sprintf("Scale: %d%%", int(scale*100))),
 		widget.NewLabel(fmt.Sprintf("v%s", appVersion)),
-		widget.NewLabel(fmt.Sprintf("Scale: %d%%", int(scale*100))),
 	)
 
 	// Main content with status line at bottom
