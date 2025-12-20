@@ -16,7 +16,7 @@ import (
 
 const (
 	appName    = "Timeclock"
-	appVersion = "1.0.0"
+	appVersion = "1.2.1"
 )
 
 // resolveDefaultDBPath returns the OS-specific default path for Timeclock's tracker.db.
