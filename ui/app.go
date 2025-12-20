@@ -17,7 +17,7 @@ import (
 )
 
 // RunApp launches the Fyne GUI.
-func RunApp(state *domain.AppState, dbPath string, scale float32) {
+func RunApp(state *domain.AppState, dbPath string, scale float32, appVersion string) {
 	a := app.NewWithID("com.example.timeclock")
 	w := a.NewWindow("Timeclock")
 
@@ -275,8 +275,8 @@ LIMIT 5;
 		descEntry,
 		categorySelect,
 		container.NewHBox(startBtn, pauseBtn, stopBtn),
-		roundToggle,
 		statusBar,
+		roundToggle,
 	)
 
 	recentEventsSection := container.NewBorder(
@@ -312,7 +312,12 @@ LIMIT 5;
 	tabs.SetTabLocation(container.TabLocationTop)
 
 	// Status line at bottom
-	statusLine := widget.NewLabel(fmt.Sprintf("DB: %s • Scale: %d%%", dbPath, int(scale*100)))
+	statusLine := container.NewBorder(
+		nil, nil,
+		widget.NewLabel(fmt.Sprintf("DB: %s", dbPath)),  // left
+		widget.NewLabel(fmt.Sprintf("v%s", appVersion)), // right
+		widget.NewLabel(fmt.Sprintf("Scale: %d%%", int(scale*100))), // center
+	)
 
 	// Main content with status line at bottom
 	mainContent := container.NewBorder(

@@ -13,6 +13,11 @@ import (
 	"github.com/1kaius1/Timeclock/ui"
 )
 
+const (
+	appName    = "Timeclock"
+	appVersion = "1.0.0"
+)
+
 // resolveDefaultDBPath returns the OS-specific default path for Timeclock's tracker.db.
 // Linux:   ~/.Timeclock/tracker.db
 // macOS:   ~/Library/Application Support/Timeclock/tracker.db
@@ -50,8 +55,14 @@ func main() {
 	// CLI flags
 	dbFlag := flag.String("db", "", "Path to tracker.db (overrides default).")
 	scaleFlag := flag.Float64("scale", 1.0, "UI scale factor (0.5 to 3.0, default 1.0)")
+	versionFlag := flag.Bool("version", false, "Show version information")
 	flag.Parse()
 
+	// Handle version flag
+	if *versionFlag {
+		fmt.Printf("%s version %s\n", appName, appVersion)
+		os.Exit(0)
+	}
 	// Validate and apply scale
 	scale := float32(*scaleFlag)
 	if scale < 0.5 || scale > 3.0 {
@@ -86,5 +97,5 @@ func main() {
 	appState := domain.NewAppState(db)
 
 	// Launch Fyne UI with scale parameter
-	ui.RunApp(appState, dbPath, scale)
+	ui.RunApp(appState, dbPath, scale, appVersion)
 }
