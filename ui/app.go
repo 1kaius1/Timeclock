@@ -14,18 +14,23 @@ import (
 
 	"github.com/1kaius1/Timeclock/domain"
 	"github.com/1kaius1/Timeclock/reporting"
+	"github.com/1kaius1/Timeclock/storage"
 )
 
 // RunApp launches the Fyne GUI.
-func RunApp(state *domain.AppState, dbPath string, scale float32) {
+func RunApp(state *domain.AppState, dbPath string, scale float32, appVersion string, scaleForced bool) {
 	a := app.NewWithID("com.example.timeclock")
 	w := a.NewWindow("Timeclock")
 
-	// Declare lastActionLabel before using it
-	lastActionLabel := widget.NewLabel("")
+	// Load settings from database
+	exactDurationsStr := storage.GetSetting(state.DB, "exact_durations", "false")
+	state.RoundToNearestMinute = (exactDurationsStr != "true")
 
-	// Initialize status bar
-	lastActionLabel.SetText(fmt.Sprintf("DB: %s", dbPath))
+	savedScaleStr := storage.GetSetting(state.DB, "scale", "1.0")
+	savedScale, _ := strconv.ParseFloat(savedScaleStr, 32)
+	if savedScale < 0.5 || savedScale > 3.0 {
+		savedScale = 1.0
+	}
 
 	// --- Controls (declare first) ---
 	descEntry := widget.NewEntry()
@@ -120,12 +125,73 @@ LIMIT 5;
 	presenceScroll := container.NewScroll(presenceOutput)
 	presenceScroll.SetMinSize(fyne.NewSize(400, 80))
 
-	// Preferences: rounding toggle (default nearest minute)
-	roundToggle := widget.NewCheck("Show exact durations (seconds)", func(exact bool) {
-		// exact == true -> show seconds; so RoundToNearestMinute = !exact
-		state.RoundToNearestMinute = !exact
+	// --- Settings Tab Widgets ---
+	
+	// Exact durations checkbox
+	exactDurationsCheck := widget.NewCheck("Show exact durations (seconds)", func(checked bool) {
+		state.RoundToNearestMinute = !checked
+		if err := storage.SetSetting(state.DB, "exact_durations", fmt.Sprintf("%t", checked)); err != nil {
+			notifyError(w, "Failed to save setting", err)
+		}
 	})
-	roundToggle.SetChecked(false) // default nearest minute (toggle OFF)
+	exactDurationsCheck.SetChecked(exactDurationsStr == "true")
+
+	// Scale slider and entry
+	scaleValueLabel := widget.NewLabel(fmt.Sprintf("%.2f", savedScale))
+	scaleEntry := widget.NewEntry()
+	scaleEntry.SetText(fmt.Sprintf("%.2f", savedScale))
+
+	scaleSlider := widget.NewSlider(0.5, 3.0)
+	scaleSlider.SetValue(savedScale)
+	scaleSlider.Step = 0.05
+
+	// Scale slider callback
+	scaleSlider.OnChanged = func(value float64) {
+		scaleValueLabel.SetText(fmt.Sprintf("%.2f", value))
+		scaleEntry.SetText(fmt.Sprintf("%.2f", value))
+	}
+
+	// Scale entry callback
+	scaleEntry.OnChanged = func(text string) {
+		if val, err := strconv.ParseFloat(text, 64); err == nil {
+			if val >= 0.5 && val <= 3.0 {
+				scaleSlider.SetValue(val)
+				scaleValueLabel.SetText(fmt.Sprintf("%.2f", val))
+			}
+		}
+	}
+
+	// Save scale button with message label
+	saveScaleMessage := widget.NewLabel("")
+	saveScaleBtn := widget.NewButton("Save Scale", func() {
+		val, err := strconv.ParseFloat(scaleEntry.Text, 64)
+		if err != nil || val < 0.5 || val > 3.0 {
+			notifyError(w, "Invalid scale", fmt.Errorf("scale must be between 0.5 and 3.0"))
+			return
+		}
+		if err := storage.SetSetting(state.DB, "scale", fmt.Sprintf("%.2f", val)); err != nil {
+			notifyError(w, "Failed to save scale", err)
+			return
+		}
+		saveScaleMessage.SetText("Scale saved. Restart the application for changes to take effect.")
+		time.AfterFunc(5*time.Second, func() {
+			saveScaleMessage.SetText("")
+		})
+	})
+
+	// Scale status information
+	var scaleStatusText string
+	if scaleForced {
+		scaleStatusText = fmt.Sprintf("Current scale: %.2f (forced by -scale flag)\nSaved scale: %.2f (will be used when flag is not provided)", scale, savedScale)
+	} else {
+		scaleStatusText = fmt.Sprintf("Current scale: %.2f (from database)\nNo -scale flag provided", scale)
+	}
+	scaleStatus := widget.NewLabel(scaleStatusText)
+	scaleStatus.Wrapping = fyne.TextWrapWord
+
+	// Database path (read-only)
+	dbPathLabel := widget.NewLabel(fmt.Sprintf("Database: %s", dbPath))
+	dbPathLabel.Wrapping = fyne.TextWrapWord
 
 	// --- Wire up handlers AFTER widgets exist ---
 
@@ -180,9 +246,6 @@ LIMIT 5;
 			_ = stateBind.Set("State: Paused")
 		}
 	})
-
-	// Status bar (grouped)
-	statusBar := container.NewHBox(stateLabel, widget.NewSeparator(), elapsedLabel, widget.NewSeparator(), lastActionLabel)
 
 	// Ticker to update elapsed while InProgress (binding handles UI thread safely)
 	go func() {
@@ -274,9 +337,9 @@ LIMIT 5;
 		widget.NewLabel("Work Details"),
 		descEntry,
 		categorySelect,
-		container.NewHBox(startBtn, pauseBtn, stopBtn),
-		roundToggle,
-		statusBar,
+		// container.NewHBox(startBtn, pauseBtn, stopBtn),
+		container.NewHBox(startBtn, pauseBtn, stopBtn, widget.NewSeparator(), stateLabel, widget.NewSeparator(), elapsedLabel),
+		// container.NewHBox(stateLabel, widget.NewSeparator(), elapsedLabel),
 	)
 
 	recentEventsSection := container.NewBorder(
@@ -305,14 +368,41 @@ LIMIT 5;
 		presenceScroll,
 	)
 
+	// Settings tab layout
+	settings := container.NewVBox(
+		widget.NewLabel("Settings"),
+		widget.NewSeparator(),
+		
+		widget.NewLabel("Display Options"),
+		exactDurationsCheck,
+		
+		widget.NewSeparator(),
+		widget.NewLabel("UI Scale (0.5 - 3.0)"),
+		scaleStatus,
+		container.NewBorder(nil, nil, widget.NewLabel("Scale:"), scaleValueLabel, scaleSlider),
+		container.NewBorder(nil, nil, widget.NewLabel("Value:"), nil, scaleEntry),
+		saveScaleBtn,
+		saveScaleMessage,
+		
+		widget.NewSeparator(),
+		widget.NewLabel("Database Location"),
+		dbPathLabel,
+	)
+
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Track", controls),
 		container.NewTabItem("Reports", reports),
+		container.NewTabItem("Settings", settings),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 
 	// Status line at bottom
-	statusLine := widget.NewLabel(fmt.Sprintf("DB: %s • Scale: %d%%", dbPath, int(scale*100)))
+	statusLine := container.NewBorder(
+		nil, nil, nil,
+		// widget.NewLabel(fmt.Sprintf("DB: %s", dbPath)),
+		// widget.NewLabel(fmt.Sprintf("Scale: %d%%", int(scale*100))),
+		widget.NewLabel(fmt.Sprintf("v%s", appVersion)),
+	)
 
 	// Main content with status line at bottom
 	mainContent := container.NewBorder(
@@ -399,3 +489,4 @@ func isYYYYMMDD(s string) bool {
 	}
 	return true
 }
+
