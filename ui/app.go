@@ -31,7 +31,7 @@ func RunApp(state *domain.AppState, dbPath string, scale float32) {
 	descEntry := widget.NewEntry()
 	descEntry.PlaceHolder = "Description of work..."
 
-	categoryOpts := []string{"Task", "Project", "Meeting", "Training", "Mentoring", "Incident", "Major Incident"}
+	categoryOpts := []string{"Task", "Project", "Training", "Mentoring", "Incident", "Major Incident"}
 	categorySelect := widget.NewSelect(categoryOpts, func(string) {})
 	categorySelect.PlaceHolder = "Select category"
 
@@ -81,7 +81,7 @@ LIMIT 5;
 				continue
 			}
 			t := time.Unix(timestampUTC, 0).Local()
-			timeStr := t.Format("15:04:05")
+			timeStr := t.Format("2006-01-02 15:04:05")
 			desc := description
 			if len(desc) > 30 {
 				desc = desc[:27] + "..."
@@ -105,12 +105,20 @@ LIMIT 5;
 	toEntry := widget.NewEntry()
 	toEntry.PlaceHolder = "To (YYYY-MM-DD)"
 	var runReportBtn *widget.Button
-	reportOutput := widget.NewMultiLineEntry()
-	reportOutput.SetPlaceHolder("Totals per category will appear here...")
-	reportOutput.Disable()
-	presenceOutput := widget.NewMultiLineEntry()
-	presenceOutput.SetPlaceHolder("Presence days will appear here...")
-	presenceOutput.Disable()
+
+	// Use Labels instead of MultiLineEntry for output
+	reportOutput := widget.NewLabel("Totals per category will appear here...")
+	reportOutput.Wrapping = fyne.TextWrapWord
+
+	presenceOutput := widget.NewLabel("Presence days will appear here...")
+	presenceOutput.Wrapping = fyne.TextWrapWord
+
+	// Wrap in scroll containers so long reports are scrollable
+	reportScroll := container.NewScroll(reportOutput)
+	reportScroll.SetMinSize(fyne.NewSize(400, 150))
+
+	presenceScroll := container.NewScroll(presenceOutput)
+	presenceScroll.SetMinSize(fyne.NewSize(400, 80))
 
 	// Preferences: rounding toggle (default nearest minute)
 	roundToggle := widget.NewCheck("Show exact durations (seconds)", func(exact bool) {
@@ -292,9 +300,9 @@ LIMIT 5;
 		runReportBtn,
 		widget.NewSeparator(),
 		widget.NewLabel("Totals per category"),
-		reportOutput,
+		reportScroll,
 		widget.NewLabel("Presence"),
-		presenceOutput,
+		presenceScroll,
 	)
 
 	tabs := container.NewAppTabs(
