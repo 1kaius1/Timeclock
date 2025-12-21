@@ -16,7 +16,7 @@ import (
 
 const (
 	appName    = "Timeclock"
-	appVersion = "1.2.1"
+	appVersion = "1.3.1"
 )
 
 // resolveDefaultDBPath returns the OS-specific default path for Timeclock's tracker.db.
@@ -89,6 +89,11 @@ func main() {
 	// Initialize domain state
 	appState := domain.NewAppState(db)
 
+	// Restore state from database (handles interrupted sessions)
+	if err := appState.RestoreState(); err != nil {
+		log.Fatalf("failed to restore state: %v", err)
+	}
+
 	// Determine scale: flag overrides database
 	var scale float32
 	var scaleForced bool
@@ -110,7 +115,7 @@ func main() {
 		scale = float32(scaleFloat)
 		scaleForced = false
 	}
-	
+
 	// Set FYNE_SCALE environment variable before creating the app
 	os.Setenv("FYNE_SCALE", fmt.Sprintf("%.2f", scale))
 
