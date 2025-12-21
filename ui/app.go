@@ -35,10 +35,20 @@ func RunApp(state *domain.AppState, dbPath string, scale float32, appVersion str
 	// --- Controls (declare first) ---
 	descEntry := widget.NewEntry()
 	descEntry.PlaceHolder = "Description of work..."
+	
+	// If state was restored, populate the description field
+	if state.CurrentState != domain.Stopped {
+		descEntry.SetText(state.Description)
+	}
 
 	categoryOpts := []string{"Task", "Project", "Training", "Mentoring", "Incident", "Major Incident"}
 	categorySelect := widget.NewSelect(categoryOpts, func(string) {})
 	categorySelect.PlaceHolder = "Select category"
+	
+	// If state was restored, select the category
+	if state.CurrentState != domain.Stopped {
+		categorySelect.SetSelected(state.Category)
+	}
 
 	// Declare buttons up-front so closures can capture them
 	var startBtn *widget.Button
@@ -337,9 +347,8 @@ LIMIT 5;
 		widget.NewLabel("Work Details"),
 		descEntry,
 		categorySelect,
-		// container.NewHBox(startBtn, pauseBtn, stopBtn),
-		container.NewHBox(startBtn, pauseBtn, stopBtn, widget.NewSeparator(), stateLabel, widget.NewSeparator(), elapsedLabel),
-		// container.NewHBox(stateLabel, widget.NewSeparator(), elapsedLabel),
+		container.NewHBox(startBtn, pauseBtn, stopBtn),
+		container.NewHBox(stateLabel, widget.NewSeparator(), elapsedLabel),
 	)
 
 	recentEventsSection := container.NewBorder(
@@ -398,10 +407,10 @@ LIMIT 5;
 
 	// Status line at bottom
 	statusLine := container.NewBorder(
-		nil, nil, nil,
-		// widget.NewLabel(fmt.Sprintf("DB: %s", dbPath)),
-		// widget.NewLabel(fmt.Sprintf("Scale: %d%%", int(scale*100))),
+		nil, nil,
+		widget.NewLabel(fmt.Sprintf("DB: %s", dbPath)),
 		widget.NewLabel(fmt.Sprintf("v%s", appVersion)),
+		widget.NewLabel(fmt.Sprintf("Scale: %d%%", int(scale*100))),
 	)
 
 	// Main content with status line at bottom
@@ -418,11 +427,14 @@ LIMIT 5;
 
 	w.SetContent(mainContent)
 	w.Resize(fyne.NewSize(700, 500))
+	// Optional: this code is run before the window closes.
 	w.SetCloseIntercept(func() {
-		// Optional: warn if an interval is in progress before closing.
+		// This example code checks the state of work, and if work is in-progress it prints a warning.
 		if state.CurrentState == domain.InProgress {
-			fmt.Println("Work is In-Progress. Stop or Pause before closing to ensure proper logging.")
+			fmt.Println("!! WARNING - Work is In-Progress and being tracked even if Timeclock is not running.")
 		}
+		
+		// Actually close the window
 		w.Close()
 	})
 
