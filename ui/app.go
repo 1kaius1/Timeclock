@@ -41,7 +41,7 @@ func RunApp(state *domain.AppState, dbPath string, scale float32, appVersion str
 		descEntry.SetText(state.Description)
 	}
 
-	categoryOpts := []string{"Task", "Project", "Training", "Mentoring", "Incident", "Major Incident"}
+	categoryOpts := []string{"Task", "Project", "Meeting", "Training", "Mentoring", "Incident", "Major Incident"}
 	categorySelect := widget.NewSelect(categoryOpts, func(string) {})
 	categorySelect.PlaceHolder = "Select category"
 	
